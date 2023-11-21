@@ -3,20 +3,25 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 
-const char *ssid = "Caniza";
-const char *password = "37650807";
+const char *ssid = "";
+const char *password = "";
 const char *mqtt_server = "test.mosquitto.org";
 const int mqtt_port = 1883;
 const char *mqtt_topic = "Batimentos";
 
+#define RXp2 16
+#define TXp2 17
+
 WiFiClient espClient;
 PubSubClient client(espClient);
- int batimentos = 75;  // Substituir pelo valor real dos batimentos
-  int spo2 = 98;  
+  int batimentos = 0;  // Substituir pelo valor real dos batimentos
+  int spo2 = 0;  
+  float temperatura = 0.0;
+
+
 void setup() {
-  Serial.begin(9600);
-  Wire.begin(9, 21, 22); // Pinos SDA (21) e SCL (22) no ESP32
-  Wire.onReceive(receiveEvent);
+  Serial.begin(115200);
+  Serial2.begin(9600, SERIAL_8N1, RXp2, TXp2);
   setupWiFi();
   setupMQTT();
 }
@@ -44,35 +49,30 @@ void setupMQTT() {
 }
 
 void loop() {
+  Serial.println(Serial2.readString());
+  String data = Serial2.readString();
+  Serial.print(data);
+  // Extraindo os valores de BPM, SPO2 e temperatura da string
+  sscanf(data.c_str(), "BPM: %d\nSPO2:%d\ntemperatura: %f", &batimentos, &spo2, &temperatura);
+    
+    // Agora você tem os valores armazenados nas variáveis bpm, spo2 e temperatura
+    // Faça o que quiser com esses valores
+  Serial.print("batimento: ");
+  Serial.println(batimentos);
+  Serial.print("sat: ");
+  Serial.println(spo2);
+  Serial.print("temp: ");
+  Serial.println(temperatura);
+
   if (!client.connected()) {
     reconnectMQTT();
   }
-  Wire.onReceive(receiveEvent);
   publishMQTTData();
   client.loop();
   delay(1000);
 }
 
-void receiveEvent(int howMany) {
-  Serial.println("Recebendo dados via I2C:");
 
-  String receivedData = "";
-  while (Wire.available() > 0) {
-    char c = Wire.read();
-    receivedData += c;
-  }
-
-  Serial.println(receivedData);
-
-  // Agora, você precisa analisar os dados recebidos e atualizar as variáveis
-  sscanf(receivedData.c_str(), "BPM:%d, SPO2:%d", &batimentos, &spo2);
-
-  // Exiba os dados atualizados no Serial Monitor
-  Serial.print("Batimentos atualizados: ");
-  Serial.print(batimentos);
-  Serial.print(", SpO2 atualizado: ");
-  Serial.println(spo2);
-}
 
 void publishMQTTData() {
   if (!client.connected()) {
@@ -82,13 +82,16 @@ void publishMQTTData() {
   if (client.connected()) {
     String bpmTopic = String(mqtt_topic) + "/batimentos";
     String spo2Topic = String(mqtt_topic) + "/spo2";
+    String temperatureTopic = String(mqtt_topic) + "/temperatura";
 
     String bpmString = String(batimentos);
     String spo2String = String(spo2);
+    String temperaturaString = String(temperatura);
 
     client.publish(bpmTopic.c_str(), bpmString.c_str());
     client.publish(spo2Topic.c_str(), spo2String.c_str());
-    Serial.println("Enviado para MQTT: Batimentos=" + bpmString + ", SpO2=" + spo2String);
+    client.publish(temperatureTopic.c_str(), temperaturaString.c_str());
+    Serial.println("Enviado para MQTT: Batimentos=" + bpmString + ", SpO2=" + spo2String + ", Temperatura=" + temperatura);
   }
 }
 
@@ -107,3 +110,4 @@ void reconnectMQTT() {
     attempts++;
   }
 }
+
